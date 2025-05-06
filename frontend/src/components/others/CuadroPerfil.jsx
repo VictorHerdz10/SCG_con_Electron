@@ -19,7 +19,7 @@ const CuadroPerfil = () => {
               alt="User profile"
               className="w-8 h-8 rounded-full"
               onError={(e) => {
-                e.target.src = "/src/images/default-avatar-profile-icon.jpg";
+                e.target.src = "./default-avatar-profile-icon.jpg";
               }}
             />
             <span className="dark:text-white">{perfil.nombre}</span>
@@ -37,7 +37,7 @@ const CuadroPerfil = () => {
               alt="User profile"
               className="w-8 h-8 rounded-full"
               onError={(e) => {
-                e.target.src = "/src/images/default-avatar-profile-icon.jpg";
+                e.target.src = "./default-avatar-profile-icon.jpg";
               }}
             />
             <span className="dark:text-white">{perfil.nombre}</span>
@@ -55,7 +55,7 @@ const CuadroPerfil = () => {
               alt="User profile"
               className="w-8 h-8 rounded-full"
               onError={(e) => {
-                e.target.src = "/src/images/default-avatar-profile-icon.jpg";
+                e.target.src = "./default-avatar-profile-icon.jpg";
               }}
             />
             <span className="dark:text-white">{perfil.nombre}</span>
@@ -73,7 +73,7 @@ const CuadroPerfil = () => {
               alt="User profile"
               className="w-8 h-8 rounded-full"
               onError={(e) => {
-                e.target.src = "/src/images/default-avatar-profile-icon.jpg";
+                e.target.src = "./default-avatar-profile-icon.jpg";
               }}
             />
             <span className="dark:text-white">{perfil.nombre}</span>

@@ -44,51 +44,52 @@ const AsideEspecialista = () => {
     return isActiveMenuItem;
   };
   const usePageReloadDetection = () => {
+    const location = useLocation();
     useEffect(() => {
       const executeOnPageReload = async () => {
         try {
-          switch (window.location.pathname) {
-            case "/especialista/registro-contrato":
-              console.log("aqui en registro");
-              await obtenerTiposContrato();
-              await obtenerDirecciones();
-              await obtenerNotificaciones();
-              await obtenerEntidades();
-              await obtenerPerfil();
-              break;
-            case "/especialista/mi-perfil":
-              await obtenerPerfil();
-              await obtenerNotificaciones();
-              await setDirecciones([]);
-              await setEntidades([]);
-              await setContratos([]);
-              await setContractTypes([]);
-              break;
-            default:
-              navigate("/404");
+          const currentPath = location.pathname.toLowerCase();
+  
+          // Resetear estados
+          await setDirecciones([]);
+          await setEntidades([]);
+          await setContratos([]);
+          await setContractTypes([]);
+  
+          // Cargar datos comunes
+          await obtenerPerfil();
+          await obtenerNotificaciones();
+  
+          // Cargar datos específicos
+          if (currentPath.includes('/especialista/registro-contrato')) {
+            await obtenerTiposContrato();
+            await obtenerDirecciones();
+            await obtenerEntidades();
           }
+          // La ruta de perfil solo necesita los datos comunes
         } catch (error) {
-          console.error("Error during page reload operations:", error);
+          console.error("Especialista - Error during page reload:", error);
         }
       };
-
-      executeOnPageReload();
-
-      window.addEventListener("beforeunload", () => {
+  
+      const handleBeforeUnload = () => {
         localStorage.setItem("pageReloaded", "true");
-      });
-
-      if (localStorage.getItem("pageReloaded") === "true") {
+      };
+  
+      const isReload = performance.navigation?.type === 1 || 
+                      performance.getEntriesByType("navigation")[0]?.type === "reload";
+  
+      if (isReload || localStorage.getItem("pageReloaded") === "true") {
         executeOnPageReload();
         localStorage.removeItem("pageReloaded");
       }
-
-      return () => {
-        window.removeEventListener("beforeunload", () => {});
-      };
-    }, [navigate]);
-
-    return null; // Esta función no devuelve nada, solo ejecuta efectos secundarios
+  
+      executeOnPageReload();
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }, []);
+  
+    return null;
   };
   const menuItems = [
     {

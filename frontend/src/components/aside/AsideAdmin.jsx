@@ -11,7 +11,7 @@ import {
 import { motion } from "framer-motion";
 import { RiDashboardFill, RiLogoutBoxRLine } from "react-icons/ri";
 import { BsFileEarmarkText } from "react-icons/bs";
-import useValidation from "../../hooks/useValidation";
+import useValidation from "../../../src/hooks/useValidation";
 import { useLocation, useNavigate } from "react-router-dom";
 const SideMenu = () => {
   const {
@@ -51,123 +51,66 @@ const SideMenu = () => {
   };
 
   const usePageReloadDetection = () => {
+    const location = useLocation();
     useEffect(() => {
       const executeOnPageReload = async () => {
         try {
-          switch (window.location.pathname) {
-            case "/admin/registro-contrato":
-              await obtenerDirecciones();
-              await obtenerNotificaciones();
-              await obtenerEntidades();
-              await obtenerPerfil();
-              await obtenerTiposContrato();
-              await setBackupHistory([]);
-              await setUsers([]);
-              await setTrazas([]);
-              break;
-            case "/admin/gestion-direccion-empresarial":
-              await obtenerDirecciones();
-              await obtenerNotificaciones();
-              await obtenerPerfil();
-              await setEntidades([]);
-              await setContratos([]);
-              await setBackupHistory([]);
-              await setUsers([]);
-              await setTrazas([]);
-              await setContractTypes([]);
-              break;
-            case "/admin/gestion-entidad":
-              await obtenerEntidades();
-              await obtenerNotificaciones();
-              await obtenerPerfil();
-              await setDirecciones([]);
-              await setContratos([]);
-              await setBackupHistory([]);
-              await setUsers([]);
-              await setTrazas([]);
-              await setContractTypes([]);
-              break;
-            case "/admin/gestion-usuarios":
-              await obtenerUsuarios();
-              await obtenerNotificaciones();
-              await obtenerPerfil();
-              await setDirecciones([]);
-              await setEntidades([]);
-              await setContratos([]);
-              await setBackupHistory([]);
-              await setTrazas([]);
-              await setContractTypes([]);
-              break;
-            case "/admin/respaldo-datos":
-              await obtenerBackup();
-              await obtenerNotificaciones();
-              await obtenerPerfil();
-              await setDirecciones([]);
-              await setEntidades([]);
-              await setContratos([]);
-              await setUsers([]);
-              await setTrazas([]);
-              await setContractTypes([]);
-              break;
-            case "/admin/mi-perfil":
-              await obtenerPerfil();
-              await obtenerNotificaciones();
-              await setDirecciones([]);
-              await setEntidades([]);
-              await setContratos([]);
-              await setBackupHistory([]);
-              await setUsers([]);
-              await setTrazas([]);
-              await setContractTypes([]);
-              break;
-            case "/admin/gestion-trazas":
-              await obtenerPerfil();
-              await obtenerNotificaciones();
-              await obtenerTrazas();
-              await setDirecciones([]);
-              await setEntidades([]);
-              await setContratos([]);
-              await setBackupHistory([]);
-              await setUsers([]);
-              await setContractTypes([]);
-              break;
-            case "/admin/gestion-tipo-contrato":
-              await obtenerPerfil();
-              await obtenerNotificaciones();
-              await obtenerTiposContrato();
-              await obtenerTrazas([]);
-              await setDirecciones([]);
-              await setEntidades([]);
-              await setContratos([]);
-              await setBackupHistory([]);
-              await setUsers([]);
-              break;
-
-            default:
-              navigate("/404");
+          const currentPath = location.pathname.toLowerCase();
+  
+          // Resetear todos los estados
+          await setDirecciones([]);
+          await setEntidades([]);
+          await setContratos([]);
+          await setContractTypes([]);
+          await setBackupHistory([]);
+          await setUsers([]);
+          await setTrazas([]);
+  
+          // Cargar datos comunes
+          await obtenerPerfil();
+          await obtenerNotificaciones();
+  
+          // Cargar datos específicos
+          if (currentPath.includes('/admin/registro-contrato')) {
+            await obtenerDirecciones();
+            await obtenerEntidades();
+            await obtenerTiposContrato();
+          } else if (currentPath.includes('/admin/gestion-direccion-empresarial')) {
+            await obtenerDirecciones();
+          } else if (currentPath.includes('/admin/gestion-entidad')) {
+            await obtenerEntidades();
+          } else if (currentPath.includes('/admin/gestion-usuarios')) {
+            await obtenerUsuarios();
+          } else if (currentPath.includes('/admin/respaldo-datos')) {
+            await obtenerBackup();
+          } else if (currentPath.includes('/admin/gestion-trazas')) {
+            await obtenerTrazas();
+          } else if (currentPath.includes('/admin/gestion-tipo-contrato')) {
+            await obtenerTiposContrato();
           }
         } catch (error) {
-          console.error("Error during page reload operations:", error);
+          console.error("Admin - Error during page reload:", error);
         }
       };
-
-      executeOnPageReload();
-
-      window.addEventListener("beforeunload", () => {
+  
+      const handleBeforeUnload = () => {
         localStorage.setItem("pageReloaded", "true");
-      });
-
-      if (localStorage.getItem("pageReloaded") === "true") {
+      };
+  
+      const isReload = performance.navigation?.type === 1 || 
+                      performance.getEntriesByType("navigation")[0]?.type === "reload";
+  
+      if (isReload || localStorage.getItem("pageReloaded") === "true") {
         executeOnPageReload();
         localStorage.removeItem("pageReloaded");
       }
-
-      return () => {
-        window.removeEventListener("beforeunload", () => {});
-      };
-    }, [navigate]);
-
-    return null; // Esta función no devuelve nada, solo ejecuta efectos secundarios
+  
+      executeOnPageReload();
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }, []);
+  
+    return null;
   };
   const menuItems = [
     {

@@ -10,7 +10,7 @@ import { motion } from "framer-motion";
 import { IoClose } from "react-icons/io5";
 import { RiDashboardFill, RiLogoutBoxRLine } from "react-icons/ri";
 import { BsFileEarmarkText } from "react-icons/bs";
-import useValidation from "../../hooks/useValidation";
+import useValidation from "../../../src/hooks/useValidation";
 import { useLocation, useNavigate } from "react-router-dom";
 const AsideDirector = () => {
   const {
@@ -44,74 +44,61 @@ const AsideDirector = () => {
     return isActiveMenuItem;
   };
   const usePageReloadDetection = () => {
+    const location = useLocation();
     useEffect(() => {
       const executeOnPageReload = async () => {
         try {
-          switch (window.location.pathname) {
-            case "/directivo/registro-contrato":
-              await obtenerTiposContrato();
-              await obtenerDirecciones();
-              await obtenerNotificaciones();
-              await obtenerEntidades();
-              await obtenerPerfil();
-              break;
-            case "/directivo/gestion-direccion-empresarial":
-              await obtenerDirecciones();
-              await obtenerNotificaciones();
-              await obtenerPerfil();
-              await setEntidades([]);
-              await setContratos([]);
-              await setContractTypes([]);
-              break;
-            case "/directivo/gestion-entidad":
-              await obtenerEntidades();
-              await obtenerNotificaciones();
-              await obtenerPerfil();
-              await setDirecciones([]);
-              await setContratos([]);
-              await setContractTypes([]);
-              break;
-            case "/directivo/mi-perfil":
-              await obtenerPerfil();
-              await obtenerNotificaciones();
-              await setDirecciones([]);
-              await setEntidades([]);
-              await setContratos([]);
-              await setContractTypes([]);
-              break;
-            case "/directivo/gestion-tipo-contrato":
-              await obtenerPerfil();
-              await obtenerNotificaciones();
-              await obtenerTiposContrato();
-              await setDirecciones([]);
-              await setEntidades([]);
-              await setContratos([]);
-              break;
-            default:
-              navigate("/404");
+          const currentPath = location.pathname.toLowerCase();
+  
+          // Resetear todos los estados primero
+          await setDirecciones([]);
+          await setEntidades([]);
+          await setContratos([]);
+          await setContractTypes([]);
+  
+          // Cargar datos comunes
+          await obtenerPerfil();
+          await obtenerNotificaciones();
+  
+          // Cargar datos específicos por ruta
+          if (currentPath.includes('/directivo/registro-contrato')) {
+            await obtenerTiposContrato();
+            await obtenerDirecciones();
+            await obtenerEntidades();
+          } else if (currentPath.includes('/directivo/gestion-direccion-empresarial')) {
+            await obtenerDirecciones();
+          } else if (currentPath.includes('/directivo/gestion-entidad')) {
+            await obtenerEntidades();
+          } else if (currentPath.includes('/directivo/gestion-tipo-contrato')) {
+            await obtenerTiposContrato();
           }
+          // No necesitamos un caso default explícito
         } catch (error) {
-          console.error("Error during page reload operations:", error);
+          console.error("Directivo - Error during page reload:", error);
         }
       };
-
-      executeOnPageReload();
-
-      window.addEventListener("beforeunload", () => {
+  
+      const handleBeforeUnload = () => {
         localStorage.setItem("pageReloaded", "true");
-      });
-
-      if (localStorage.getItem("pageReloaded") === "true") {
+      };
+  
+      // Detectar recarga usando Performance API
+      const isReload = performance.navigation?.type === 1 || 
+                      performance.getEntriesByType("navigation")[0]?.type === "reload";
+  
+      if (isReload || localStorage.getItem("pageReloaded") === "true") {
         executeOnPageReload();
         localStorage.removeItem("pageReloaded");
       }
-
-      return () => {
-        window.removeEventListener("beforeunload", () => {});
-      };
-    }, [navigate]);
-
-    return null; // Esta función no devuelve nada, solo ejecuta efectos secundarios
+  
+      // Ejecutar siempre al montar
+      executeOnPageReload();
+  
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }, []); // Eliminamos navigate de las dependencias
+  
+    return null;
   };
   const menuItems = [
     {
