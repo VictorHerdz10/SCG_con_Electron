@@ -1369,8 +1369,8 @@ const ContractTable = ({ tipoContrato }) => {
                           <div className="flex items-center">
                             <div
                               className={`w-3 h-3 rounded-full ${getValueColor(
-                                contract.valorPrincipal || 0,
-                                contract.valorDisponible || 0
+                                +contract.valorPrincipal || 0,
+                                +contract.valorDisponible || 0
                               )}} mr-2`}
                             ></div>
                             <div className="block">
