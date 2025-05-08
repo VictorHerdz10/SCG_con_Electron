@@ -194,7 +194,7 @@ const registrarContrato = async (req, res) => {
         valorPrincipal: valorPrincipal || null,
         valorDisponible: valorPrincipal || null, // Si valorPrincipal no existe, será null
         vigencia: vigencia || null,
-        fechaVencimiento: vigencia
+        fechaVencimiento: valorPrincipal
           ? calcularFechaFin(fechaRecibido, vigencia)
           : null,
         estado: estado || null,
@@ -424,10 +424,71 @@ const actualizarRegistroContrato = async (req, res) => {
     if (!contrato) {
       return res.status(404).json({ msg: "Contrato no encontrado" });
     }
+
+    // Verificar si es un contrato específico y obtener su marco asociado
+    let contratoMarco = null;
+
+    // Opción 1: Buscar directamente en los contratos marco que tengan este contrato en sus específicos
+    if (!contrato.isMarco) {
+      contratoMarco = await Contrato.findOne({
+        isMarco: true,
+        especificos: { $in: [id] },
+      });
+    }
+
+    // Opción 2: Si no se encuentra con la opción 1, usar la lógica de tipos de contrato
+    if (!contratoMarco && contrato.tipoDeContrato) {
+      const tipoContrato = await TipoContrato.findOne({
+        nombre: contrato.tipoDeContrato,
+      });
+
+      if (tipoContrato && tipoContrato.isEspecifico && tipoContrato.marcoId) {
+        const tipoContratoMarco = await TipoContrato.findById(
+          tipoContrato.marcoId
+        );
+
+        if (tipoContratoMarco) {
+          contratoMarco = await Contrato.findOne({
+            tipoDeContrato: tipoContratoMarco.nombre,
+            direccionEjecuta: contrato.direccionEjecuta,
+            isMarco: true,
+          });
+        }
+      }
+    }
+
+    // Si estamos actualizando un contrato específico y tiene un marco asociado
+    if (contratoMarco) {
+      // Calcular diferencias para los valores que se están actualizando
+      const diferenciaValorPrincipal = req.body.valorPrincipal
+        ? req.body.valorPrincipal - (contrato.valorPrincipal || 0)
+        : 0;
+
+      const diferenciaValorDisponible = req.body.valorDisponible
+        ? req.body.valorDisponible - (contrato.valorDisponible || 0)
+        : diferenciaValorPrincipal; // Asume que si no se envía valorDisponible, cambia igual que principal
+
+      const diferenciaValorGastado = req.body.valorGastado
+        ? req.body.valorGastado - (contrato.valorGastado || 0)
+        : 0;
+
+      // Actualizar los valores del marco
+      if (diferenciaValorPrincipal !== 0) {
+        contratoMarco.valorPrincipal += diferenciaValorPrincipal;
+        contratoMarco.valorDisponible += diferenciaValorPrincipal; // O usar diferenciaValorDisponible?
+      }
+
+      if (diferenciaValorGastado !== 0) {
+        contratoMarco.valorGastado += diferenciaValorGastado;
+        contratoMarco.valorDisponible -= diferenciaValorGastado;
+      }
+
+      await contratoMarco.save();
+    }
     if (req.body.valorPrincipal) {
       if (req.body.valorPrincipal < contrato.valorGastado) {
         return res.status(400).json({
-          msg: "El valor del contrato no puede ser menor que el valor  gastado",
+          msg: "El valor del contrato no puede ser menor que el valor gastado",
         });
       }
     }
@@ -436,12 +497,12 @@ const actualizarRegistroContrato = async (req, res) => {
       validarFechaNoFutura(req.body.fechaRecibido)
     ) {
       return res.status(400).json({
-        msg: `La fecha de recepción  no puede ser mayor a la actual`,
+        msg: `La fecha de recepción no puede ser mayor a la actual`,
       });
     }
     if (req.body.firmado && validarFechaNoFutura(req.body.firmado)) {
       return res.status(400).json({
-        msg: `La fecha de firma  no puede ser mayor a la actual`,
+        msg: `La fecha de firma no puede ser mayor a la actual`,
       });
     }
     if (
@@ -449,7 +510,7 @@ const actualizarRegistroContrato = async (req, res) => {
       validarFechaNoFutura(req.body.entregadoJuridica)
     ) {
       return res.status(400).json({
-        msg: `La fecha de entrega jurídica  no puede ser mayor a la actual`,
+        msg: `La fecha de entrega jurídica no puede ser mayor a la actual`,
       });
     }
     if (
@@ -457,7 +518,7 @@ const actualizarRegistroContrato = async (req, res) => {
       validarFechaNoFutura(req.body.aprobadoPorCC)
     ) {
       return res.status(400).json({
-        msg: `La fecha de aprobación del CC  no puede ser mayor a la actual`,
+        msg: `La fecha de aprobación del CC no puede ser mayor a la actual`,
       });
     }
     if (!req.file) {
@@ -498,6 +559,7 @@ const actualizarRegistroContrato = async (req, res) => {
       contrato.numeroDictamen =
         req.body.numeroDictamen || contrato.numeroDictamen;
       await contrato.save();
+
       if (
         req.body.tipoDeContrato &&
         contrato.tipoDeContrato !== contratoactual.tipoDeContrato
@@ -685,6 +747,105 @@ const actualizarRegistroContrato = async (req, res) => {
       );
     }
     await contrato.save();
+
+    if (
+      req.body.tipoDeContrato &&
+      contrato.tipoDeContrato !== contratoactual.tipoDeContrato
+    ) {
+      old_value.Tipo_de_Contrato = contratoactual.tipoDeContrato;
+      new_value.Tipo_de_Contrato = req.body.tipoDeContrato;
+    }
+    if (
+      req.body.objetoDelContrato &&
+      contrato.objetoDelContrato !== contratoactual.objetoDelContrato
+    ) {
+      old_value.Objeto_Del_Contrato = contratoactual.objetoDelContrato;
+      new_value.Tipo_de_Contrato = req.body.objetoDelContrato;
+    }
+    if (req.body.entidad && contrato.entidad !== contratoactual.entidad) {
+      old_value.Entidad = contratoactual.entidad;
+      new_value.Entidad = req.body.entidad;
+    }
+    if (
+      req.body.direccionEjecuta &&
+      contrato.direccionEjecuta !== contratoactual.direccionEjecuta
+    ) {
+      old_value.Direccion_Ejecutiva = contratoactual.direccionEjecuta;
+      new_value.Direccion_Ejecutiva = req.body.direccionEjecuta;
+    }
+    if (
+      req.body.fechaRecibido &&
+      parcearDate(contrato.fechaRecibido) !==
+        parcearDate(contratoactual.fechaRecibido)
+    ) {
+      old_value.Fecha_Recibido = parcearDate(contratoactual.fechaRecibido);
+      new_value.Fecha_Recibido = parcearDate(contrato.fechaRecibido);
+    }
+    if (
+      req.body.valorPrincipal &&
+      contrato.valorPrincipal !== contratoactual.valorPrincipal
+    ) {
+      old_value.Monto = `$${contratoactual.valorPrincipal}`;
+      new_value.Monto = `$${req.body.valorPrincipal}`;
+      old_value.Monto_Disponible = `$${contratoactual.valorDisponible}`;
+      new_value.Monto_Disponible = `$${contrato.valorDisponible}`;
+    }
+    if (req.body.vigencia && contrato.vigencia !== contratoactual.vigencia) {
+      old_value.Vigencia = convertirVigencia(contratoactual.vigencia);
+      new_value.Vigencia = convertirVigencia(req.body.vigencia);
+      old_value.Fecha_de_Vencimiento = parcearDate(
+        contratoactual.fechaVencimiento
+      );
+      new_value.Fecha_de_Vencimiento = parcearDate(contrato.fechaVencimiento);
+    }
+    if (req.body.estado && contrato.estado !== contratoactual.estado) {
+      old_value.Estado = contratoactual.estado;
+      new_value.Estado = req.body.estado;
+    }
+    if (
+      req.body.aprobadoPorCC &&
+      parcearDate(contrato.aprobadoPorCC) !==
+        parcearDate(contratoactual.aprobadoPorCC)
+    ) {
+      old_value.Aprobado_por_el_CC = parcearDate(contratoactual.aprobadoPorCC);
+      new_value.Aprobado_por_el_CC = parcearDate(contrato.aprobadoPorCC);
+    }
+    if (
+      req.body.firmado &&
+      parcearDate(contrato.firmado) !== parcearDate(contratoactual.firmado)
+    ) {
+      old_value.Firmado = parcearDate(contratoactual.firmado);
+      new_value.Firmado = parcearDate(contrato.firmado);
+    }
+    if (
+      req.body.entregadoJuridica &&
+      parcearDate(contrato.entregadoJuridica) !==
+        parcearDate(contratoactual.entregadoJuridica)
+    ) {
+      old_value.Entregado_a_Juridica = parcearDate(
+        contratoactual.entregadoJuridica
+      );
+      new_value.Entregado_a_Juridica = parcearDate(contrato.entregadoJuridica);
+    }
+    if (
+      req.body.numeroDictamen &&
+      contrato.numeroDictamen !== contratoactual.numeroDictamen
+    ) {
+      old_value.Numero_de_Dictamen = contratoactual.numeroDictamen;
+      new_value.Numero_de_Dictamen = req.body.numeroDictamen;
+    }
+    await guardarTraza({
+      entity_name: "Contratos",
+      entity_id: contrato._id,
+      old_value: JSON.stringify({ Valores_anteriores: old_value }, 2, null),
+      new_value: JSON.stringify({ Valores_nuevos: new_value }, 2, null),
+      action_type: "ACTUALIZAR",
+      changed_by: usuario.nombre,
+      ip_address: ipAddress(req),
+      session_id: req.sessionID,
+      metadata: userAgent(req),
+    });
+
     return res
       .status(200)
       .json({ msg: "Contrato actualizado exitosamente", contrato });
@@ -695,7 +856,6 @@ const actualizarRegistroContrato = async (req, res) => {
       .json({ msg: "Error al intentar actualizar el registro" });
   }
 };
-
 const eliminarRegistroContrato = async (req, res) => {
   const { id } = req.params;
   const { usuario } = req;
@@ -718,6 +878,53 @@ const eliminarRegistroContrato = async (req, res) => {
     if (!contrato) {
       return res.status(404).json({ msg: "Contrato no encontrado" });
     }
+
+    // Verificar si es un contrato específico y obtener su marco asociado
+    let contratoMarco = null;
+
+    // Opción 1: Buscar directamente en los contratos marco que tengan este contrato en sus específicos
+    if (!contrato.isMarco) {
+      contratoMarco = await Contrato.findOne({
+        isMarco: true,
+        especificos: { $in: [id] },
+      });
+    }
+
+    // Opción 2: Si no se encuentra con la opción 1, usar la lógica de tipos de contrato
+    if (!contratoMarco && contrato.tipoDeContrato) {
+      const tipoContrato = await TipoContrato.findOne({
+        nombre: contrato.tipoDeContrato,
+      });
+
+      if (tipoContrato && !tipoContrato.isMarco && tipoContrato.marcoId) {
+        const tipoContratoMarco = await TipoContrato.findById(
+          tipoContrato.marcoId
+        );
+
+        if (tipoContratoMarco) {
+          contratoMarco = await Contrato.findOne({
+            tipoDeContrato: tipoContratoMarco.nombre,
+            direccionEjecuta: contrato.direccionEjecuta,
+            isMarco: true,
+          });
+        }
+      }
+    }
+
+    // Si encontramos un contrato marco, actualizamos sus valores
+    if (contratoMarco) {
+      contratoMarco.valorPrincipal -= contrato.valorPrincipal || 0;
+      contratoMarco.valorDisponible -= contrato.valorDisponible || 0;
+      contratoMarco.valorGastado -= contrato.valorGastado || 0;
+
+      // Eliminar este contrato de la lista de específicos del marco
+      contratoMarco.especificos = contratoMarco.especificos.filter(
+        (especificoId) => especificoId.toString() !== id
+      );
+
+      await contratoMarco.save();
+    }
+
     const facturas = await Factura.find({ contratoId: id });
     if (facturas.length > 0) {
       await Factura.deleteMany({ contratoId: id });
@@ -737,21 +944,33 @@ const eliminarRegistroContrato = async (req, res) => {
       entity_id: contrato._id,
       old_value: JSON.stringify(
         {
-          Tipo_de_Contrato: contrato.tipoDeContrato,
-          Objeto_Del_Contrato: contrato.objetoDelContrato,
-          Entidad: contrato.entidad,
-          Direccion_Ejecutiva: contrato.direccionEjecuta,
-          Fecha_Recibido: parcearDate(contrato.fechaRecibido),
-          Monto: `$${contrato.valorPrincipal}`,
-          Monto_Disponible: `$${contrato.valorDisponible}`,
-          Monto_Gastado: `$${contrato.valorGastado}`,
-          Vigencia: convertirVigencia(contrato.vigencia),
-          Fecha_de_Vencimiento: parcearDate(contrato.fechaVencimiento),
-          Estado: contrato.estado,
-          Aprobado_por_el_CC: parcearDate(contrato.aprobadoPorCC),
-          Firmado: parcearDate(contrato.firmado),
-          Entregado_a_Juridica: parcearDate(contrato.entregadoJuridica),
-          Numero_de_Dictamen: contrato.numeroDictamen,
+          Tipo_de_Contrato: contrato.tipoDeContrato || "No especificado",
+          Objeto_Del_Contrato: contrato.objetoDelContrato || "No especificado",
+          Entidad: contrato.entidad || "No especificado",
+          Direccion_Ejecutiva: contrato.direccionEjecuta || "No especificado",
+          Fecha_Recibido: contrato.fechaRecibido
+            ? parcearDate(contrato.fechaRecibido)
+            : "No especificado",
+          Monto: `$${contrato.valorPrincipal || 0}`,
+          Monto_Disponible: `$${contrato.valorDisponible || 0}`,
+          Monto_Gastado: `$${contrato.valorGastado || 0}`,
+          Vigencia: contrato.vigencia
+            ? convertirVigencia(contrato.vigencia)
+            : "No especificado",
+          Fecha_de_Vencimiento: contrato.fechaVencimiento
+            ? parcearDate(contrato.fechaVencimiento)
+            : "No especificado",
+          Estado: contrato.estado || "No especificado",
+          Aprobado_por_el_CC: contrato.aprobadoPorCC
+            ? parcearDate(contrato.aprobadoPorCC)
+            : "No especificado",
+          Firmado: contrato.firmado
+            ? parcearDate(contrato.firmado)
+            : "No especificado",
+          Entregado_a_Juridica: contrato.entregadoJuridica
+            ? parcearDate(contrato.entregadoJuridica)
+            : "No especificado",
+          Numero_de_Dictamen: contrato.numeroDictamen || "No especificado",
         },
         2,
         null
@@ -1125,7 +1344,6 @@ const cambiarEstado = async () => {
   }
 };
 
-//Crear suplemento
 const crearSuplemento = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1141,8 +1359,9 @@ const crearSuplemento = async (req, res) => {
 
     const suplemento = await Suplemento.create({
       ...req.body,
+      contratoId: id,
       isGlobal,
-      montoOriginal: req.body.monto // Guardar monto original
+      montoOriginal: req.body.monto, // Guardar monto original
     });
 
     existeContrato.isGotSupplement = true;
@@ -1160,7 +1379,9 @@ const crearSuplemento = async (req, res) => {
     });
 
     return res.status(201).json({
-      msg: `Suplemento ${isGlobal ? 'global' : 'local'} creado correctamente para el contrato ${existeContrato.numeroDictamen}`,
+      msg: `Suplemento ${
+        isGlobal ? "global" : "local"
+      } creado correctamente para el contrato ${existeContrato.numeroDictamen}`,
       suplemento,
     });
   } catch (error) {
@@ -1172,7 +1393,6 @@ const crearSuplemento = async (req, res) => {
   }
 };
 
-// Obtener todos los suplementos de un contrato
 const getSuplementosByContrato = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1197,7 +1417,6 @@ const getSuplementosByContrato = async (req, res) => {
   }
 };
 
-// Actualizar suplemento
 const actualizarSuplemento = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1238,7 +1457,6 @@ const actualizarSuplemento = async (req, res) => {
   }
 };
 
-// Eliminar suplemento
 const eliminarSuplemento = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1272,6 +1490,7 @@ const eliminarSuplemento = async (req, res) => {
     });
   }
 };
+
 const useSupplement = async (req, res) => {
   const { id } = req.params;
   try {
@@ -1281,7 +1500,6 @@ const useSupplement = async (req, res) => {
         msg: `No se encontró el suplemento con id ${id}`,
       });
     }
-
     const contratoOrigen = await Contrato.findById(supplementToUse.contratoId);
     if (!contratoOrigen) {
       return res.status(404).json({
@@ -1289,112 +1507,123 @@ const useSupplement = async (req, res) => {
       });
     }
 
-    // Preparar datos del suplemento
+    if (!contratoOrigen.fechaVencimiento && supplementToUse.tiempo) {
+      return res.status(400).json({
+        msg: "El contrato no tiene una fecha de vencimiento definida (no tiene vigencia)",
+      });
+    }
+
     const supplementData = {
       nombre: supplementToUse.nombre,
       tiempo: supplementToUse.tiempo,
       monto: supplementToUse.monto,
-      montoOriginal: supplementToUse.monto,
+      montoOriginal: supplementToUse.montoOriginal,
       isGlobal: supplementToUse.isGlobal,
-      supplementId: supplementToUse._id
+      supplementId: supplementToUse._id,
+      fechaUso: new Date(),
     };
 
-    // Si es un suplemento GLOBAL (de contrato marco)
     if (supplementToUse.isGlobal) {
-      // 1. Obtener todos los contratos específicos asociados
       const contratosEspecificos = await Contrato.find({
-        _id: { $in: contratoOrigen.especificos }
+        _id: { $in: contratoOrigen.especificos },
       });
 
-      // 2. Si es de TIEMPO: aplicar a todos los específicos
-      if (supplementToUse.tiempo && 
-          (supplementToUse.tiempo.days > 0 || 
-           supplementToUse.tiempo.months > 0 || 
-           supplementToUse.tiempo.years > 0)) {
-        
+      if (supplementToUse.tiempo) {
+        const nuevaFechaVencimiento = calcularFechaFinSuplemento(
+          contratoOrigen.fechaVencimiento,
+          supplementToUse.tiempo
+        );
+
+        await Contrato.findByIdAndUpdate(contratoOrigen._id, {
+          fechaVencimiento: nuevaFechaVencimiento,
+          $push: { supplement: supplementData },
+        });
+
+        supplementToUse.usedBy.push({
+          contratoId: contratoOrigen._id,
+          tiempoUsado: supplementToUse.tiempo,
+        });
+      } else if (supplementToUse.monto > 0) {
+        // MODIFICACIÓN IMPORTANTE: Eliminado el $inc que afectaba valorDisponible
+        await Contrato.findByIdAndUpdate(contratoOrigen._id, {
+          $push: { supplement: supplementData },
+        });
+
         const bulkOps = contratosEspecificos.map(contrato => ({
           updateOne: {
             filter: { _id: contrato._id },
             update: {
-              $push: { supplement: supplementData },
-              $set: { 
-                fechaVencimiento: calcularFechaFinSuplemento(
-                  contrato.fechaVencimiento, 
-                  supplementToUse.tiempo
-                )
+              $push: { 
+                supplement: {
+                  ...supplementData,
+                  isGlobal: true
+                }
               }
-            }
-          }
+              // Eliminado el $inc que afectaba valorDisponible
+            },
+          },
         }));
 
-        await Contrato.bulkWrite(bulkOps);
+        if (bulkOps.length > 0) {
+          await Contrato.bulkWrite(bulkOps);
+        }
 
-        // Registrar uso en el suplemento
-        supplementToUse.usedBy = contratosEspecificos.map(contrato => ({
-          contratoId: contrato._id,
-          tiempoUsado: supplementToUse.tiempo
-        }));
-        await supplementToUse.save();
-
-      } 
-      // 3. Si es de MONTO: solo registrar que está disponible
-      else if (supplementToUse.monto > 0) {
-        // No se aplica directamente, queda disponible para uso individual
-        // Solo guardamos el suplemento en el contrato marco
-        await contratoOrigen.updateOne(
-          { $push: { supplement: supplementData } },
-          { new: true }
-        );
+        supplementToUse.usedBy = [
+          {
+            contratoId: contratoOrigen._id,
+            montoUsado: 0,
+          },
+          ...contratosEspecificos.map(contrato => ({
+            contratoId: contrato._id,
+            montoUsado: 0,
+          })),
+        ];
       }
-
-    } 
-    // Si es un suplemento LOCAL (de contrato específico)
-    else {
-      // Aplicar directamente al contrato
-      await contratoOrigen.updateOne(
-        { $push: { supplement: supplementData } },
-        { new: true }
-      );
-
-      // Si es de tiempo, actualizar fecha de vencimiento
+    } else {
+      // Lógica para suplementos LOCALES (contrato específico)
+      const updateData = {
+        $push: { supplement: supplementData },
+      };
+    
       if (supplementToUse.tiempo) {
-        contratoOrigen.fechaVencimiento = calcularFechaFinSuplemento(
+        const nuevaFechaVencimiento = calcularFechaFinSuplemento(
           contratoOrigen.fechaVencimiento,
           supplementToUse.tiempo
         );
-        await contratoOrigen.save();
+        updateData.fechaVencimiento = nuevaFechaVencimiento;
       }
+    
+      await Contrato.findByIdAndUpdate(contratoOrigen._id, updateData);
+    
+      const contratoMarco = await Contrato.findOne({
+        especificos: { $elemMatch: { $eq: contratoOrigen._id } },
+        isMarco: true
+      });
+    
+      if (contratoMarco) {
+        const marcoUpdate = {
+          $push: {
+            supplement: {
+              ...supplementData,
+              isGlobal: false,
+              contratoOrigenId: contratoOrigen._id,
+              contratoEspecificoNombre: contratoOrigen.numeroDictamen || contratoOrigen.objetoDelContrato
+            }
+          }
+          // Eliminado el $inc que afectaba valorDisponible en el marco
+        };
+  
+        await Contrato.findByIdAndUpdate(contratoMarco._id, marcoUpdate, { new: true });
+      }
+    }
 
-      // Eliminar el suplemento local después de usarlo
+    if (!supplementToUse.isGlobal || !supplementToUse.monto) {
       await supplementToUse.deleteOne();
-    }
-
-    // Manejo de notificaciones para contratos específicos
-    if (supplementToUse.isGlobal && supplementToUse.tiempo) {
-      // Actualizar notificaciones para todos los específicos
-      const contratosEspecificosIds = contratoOrigen.especificos;
-      await Notification.deleteMany({
-        contratoId: { $in: contratosEspecificosIds },
-        $expr: {
-          $gt: [
-            { $subtract: ["$fechaVencimiento", "$fechaRecibido"] },
-            30 * 24 * 60 * 60 * 1000 // 30 días en milisegundos
-          ]
-        }
-      });
     } else {
-      // Manejo normal para contratos específicos
-      const existNotification = await Notification.findOne({
-        contratoId: contratoOrigen._id,
-      });
-      if (existNotification) {
-        if (diferenciaEnDias(contratoOrigen.fechaRecibido, contratoOrigen.fechaVencimiento) > 30) {
-          await Notification.findByIdAndDelete(existNotification._id);
-        }
-      }
+      await supplementToUse.save();
     }
+    await handleNotifications(contratoOrigen, supplementToUse);
 
-    // Registro de trazas
     await guardarTraza({
       entity_name: "Suplemento",
       entity_id: id,
@@ -1405,36 +1634,38 @@ const useSupplement = async (req, res) => {
       session_id: req.sessionID,
       metadata: userAgent(req),
     });
-    
-    // Traza adicional para la modificación del contrato
-    await guardarTraza({
-      entity_name: "Contrato",
-      entity_id: contratoOrigen._id,
-      new_value: JSON.stringify({
-        supplement: contratoOrigen.supplement[contract.supplement.length - 1],
-        fechaVencimiento: contratoOrigen.fechaVencimiento,
-      }),
-      action_type: "ACTUALIZAR",
-      changed_by: req.usuario.nombre,
-      ip_address: ipAddress(req),
-      session_id: req.sessionID,
-      metadata: userAgent(req),
-    });
+
+    const contratoActualizado = await Contrato.findById(contratoOrigen._id);
 
     return res.status(200).json({
-      msg: supplementToUse.isGlobal 
-        ? supplementToUse.tiempo 
-          ? "Suplemento global de tiempo aplicado a todos los contratos asociados" 
-          : "Suplemento global de monto disponible para uso"
+      msg: supplementToUse.isGlobal
+        ? supplementToUse.tiempo
+          ? "Suplemento global de tiempo aplicado correctamente"
+          : "Suplemento global de monto distribuido a contratos asociados"
         : "Suplemento local aplicado correctamente",
-      contract: contratoOrigen,
+      contract: contratoActualizado,
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error en useSupplement:', error);
     return res.status(500).json({
       msg: "Error al usar el suplemento",
       error: error.message,
     });
+  }
+};
+
+const handleNotifications = async (contrato, supplement) => {
+  if (!supplement.tiempo) return;
+
+  const contratosAfectados = supplement.isGlobal
+    ? await Contrato.find({ _id: { $in: contrato.especificos } })
+    : [contrato];
+
+  for (const c of contratosAfectados) {
+    const diasRestantes = diferenciaEnDias(new Date(), c.fechaVencimiento);
+    if (diasRestantes > 30) {
+      await Notification.deleteMany({ contratoId: c._id });
+    }
   }
 };
 
